@@ -2,136 +2,234 @@
 <html lang="pl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Snake Cosmic Edition</title>
+<title>Mroczny Las</title>
 <style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:#0f1117;display:flex;justify-content:center;align-items:center;min-height:100vh;font-family:monospace;overflow:hidden}
-#space{position:fixed;inset:0;z-index:-1;pointer-events:none}
-#wrap{display:flex;flex-direction:column;align-items:center;gap:12px;padding:8px 0}
-#hud{display:flex;gap:32px;font-size:13px;color:#888}
-#hud span{font-size:18px;font-weight:500;color:#fff;display:block}
-canvas#c{border-radius:8px;border:1px solid #2a2d3a;display:block;background:rgba(15,17,23,.85)}
-#msg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#1a1d27;border:1px solid #3a3d4a;border-radius:10px;padding:20px 32px;text-align:center;color:#fff}
-#cw{position:relative}
-#btns{display:grid;grid-template-columns:repeat(3,44px);grid-template-rows:repeat(2,44px);gap:4px}
-#btns button{font-size:18px;border-radius:6px;width:44px;height:44px;background:#1a1d27;border:1px solid #3a3d4a;color:#fff}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#000; overflow:hidden; font-family:'Courier New',monospace; }
+#container { width:100vw; height:100vh; position:relative; cursor:crosshair; }
+canvas { display:block; width:100%; height:100%; image-rendering:pixelated; }
+#vignette { position:absolute; inset:0; background:radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.65) 100%); pointer-events:none; }
+#hud { position:absolute; top:14px; left:50%; transform:translateX(-50%); color:#3d6b3d; font-size:13px; text-align:center; letter-spacing:3px; text-shadow:0 0 12px #0a2a0a; pointer-events:none; }
+#click_msg { position:absolute; bottom:20px; left:50%; transform:translateX(-50%); color:#2a4a2a; font-size:12px; letter-spacing:2px; transition:opacity 0.5s; }
+#crosshair { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); pointer-events:none; }
+#crosshair::before { content:''; position:absolute; top:6px; left:0; width:14px; height:1px; background:#2a5a2a; opacity:0.6; }
+#crosshair::after  { content:''; position:absolute; top:0; left:6px; width:1px; height:14px; background:#2a5a2a; opacity:0.6; }
 </style>
 </head>
 <body>
-<canvas id="space"></canvas>
-<div id="wrap">
-<div id="hud">
-<div>Wynik<span id="sc">0</span></div>
-<div>Rekord<span id="hi">0</span></div>
-<div>Poziom<span id="lv">1</span></div>
-</div>
-<div id="cw">
-<canvas id="c" width="440" height="440"></canvas>
-<div id="msg"><h3>🐍 Wąż</h3><p>Naciśnij spację aby zacząć</p></div>
-</div>
-<div id="btns">
-<button onclick="dir(0,-1)">▲</button>
-<button onclick="dir(-1,0)">◄</button>
-<button onclick="dir(0,1)">▼</button>
-<button onclick="dir(1,0)">►</button>
-</div>
+<div id="container">
+  <canvas id="gc"></canvas>
+  <div id="vignette"></div>
+  <div id="hud">MROCZNY LAS v1.0</div>
+  <div id="click_msg">[ KLIKNIJ ABY WEJŚĆ DO LASU ]</div>
+  <div id="crosshair"></div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
-const CELL=20,COLS=22,ROWS=22;
-const scEl=document.getElementById('sc'),hiEl=document.getElementById('hi'),lvEl=document.getElementById('lv');
-const msg=document.getElementById('msg');
-let snake,dx,dy,ndx,ndy,food,score=0,hi=0,level=1,alive=false,loop,growing=0;
+(function(){
+  const container = document.getElementById('container');
+  const canvas    = document.getElementById('gc');
 
-function init(){
-snake=[{x:11,y:11},{x:10,y:11},{x:9,y:11}];
-dx=1;dy=0;ndx=1;ndy=0;score=0;level=1;growing=0;
-scEl.textContent=0;lvEl.textContent=1;
-placeFood();alive=true;msg.style.display='none';
-clearInterval(loop);loop=setInterval(tick,140);
-}
+  const W = window.innerWidth, H = window.innerHeight;
+  canvas.width = W; canvas.height = H;
 
-function placeFood(){
-do{food={x:Math.floor(Math.random()*COLS),y:Math.floor(Math.random()*ROWS)}}
-while(snake.some(s=>s.x===food.x&&s.y===food.y));
-}
+  const renderer = new THREE.WebGLRenderer({canvas, antialias:false});
+  renderer.setSize(W, H, false);
+  renderer.setPixelRatio(1);
 
-function tick(){
-dx=ndx;dy=ndy;
-let head={x:snake[0].x+dx,y:snake[0].y+dy};
-if(head.x<0||head.y<0||head.x>=COLS||head.y>=ROWS||snake.some(s=>s.x===head.x&&s.y===head.y)){die();return;}
-snake.unshift(head);
-if(head.x===food.x&&head.y===food.y){
-score+=10*level;
-if(score>hi){hi=score;hiEl.textContent=hi;}
-level=1+Math.floor(score/100);
-scEl.textContent=score;lvEl.textContent=level;
-placeFood();
-}else snake.pop();
-draw();
-}
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x020804);
+  scene.fog = new THREE.FogExp2(0x020d04, 0.09);
 
-function die(){
-alive=false;clearInterval(loop);
-msg.style.display='block';
-msg.innerHTML='<h3>💀 Koniec!</h3><p>Wynik: '+score+'</p>';
-}
+  const camera = new THREE.PerspectiveCamera(80, W/H, 0.05, 80);
+  camera.position.set(0, 1.65, 0);
 
-function dir(x,y){
-if(x===1&&dx===-1)return;
-if(x===-1&&dx===1)return;
-if(y===1&&dy===-1)return;
-if(y===-1&&dy===1)return;
-ndx=x;ndy=y;
-}
+  // Oświetlenie
+  scene.add(new THREE.AmbientLight(0x071407, 3));
+  const moon = new THREE.DirectionalLight(0x0d2a10, 1.2);
+  moon.position.set(-10, 20, -5);
+  scene.add(moon);
+  const fill = new THREE.PointLight(0x0a2010, 0.8, 25);
+  fill.position.set(0, 5, 0);
+  scene.add(fill);
 
-function draw(){
-ctx.fillStyle='#0f1117';ctx.fillRect(0,0,440,440);
-ctx.fillStyle='#f97316';
-ctx.beginPath();
-ctx.arc(food.x*20+10,food.y*20+10,8,0,Math.PI*2);
-ctx.fill();
-snake.forEach((s,i)=>{
-ctx.fillStyle=i?'#22c55e':'#4ade80';
-ctx.fillRect(s.x*20+1,s.y*20+1,18,18);
-});
-}
-document.addEventListener('keydown',e=>{
-if(e.key===' ') {if(!alive)init();}
-if(e.key==='ArrowUp')dir(0,-1);
-if(e.key==='ArrowDown')dir(0,1);
-if(e.key==='ArrowLeft')dir(-1,0);
-if(e.key==='ArrowRight')dir(1,0);
-});
+  // Podłoże
+  const groundGeo = new THREE.PlaneGeometry(100, 100, 20, 20);
+  const gv = groundGeo.attributes.position;
+  for(let i=0;i<gv.count;i++) gv.setY(i,(Math.random()-0.5)*0.15);
+  groundGeo.computeVertexNormals();
+  scene.add(new THREE.Mesh(groundGeo, new THREE.MeshLambertMaterial({color:0x060d05})));
 
-// Kosmiczne tło
-const space=document.getElementById('space');
-const sctx=space.getContext('2d');
-function resize(){space.width=innerWidth;space.height=innerHeight}
-resize();addEventListener('resize',resize);
-const stars=[...Array(250)].map(()=>({x:Math.random()*innerWidth,y:Math.random()*innerHeight,r:Math.random()*2,a:Math.random()*6}));
-const comets=[];
-setInterval(()=>{if(Math.random()<0.4)comets.push({x:-50,y:Math.random()*innerHeight,vx:4+Math.random()*4,vy:-1+Math.random()*2,l:180})},4000);
+  // Drzewo z liśćmi
+  function addTree(x, z){
+    const h     = 5 + Math.random()*8;
+    const thick = 0.12 + Math.random()*0.18;
 
-function cosmos(){
-sctx.clearRect(0,0,space.width,space.height);
-stars.forEach(s=>{
-s.a+=0.03;
-sctx.fillStyle=`rgba(255,255,255,${0.3+Math.abs(Math.sin(s.a))*0.7})`;
-sctx.beginPath();sctx.arc(s.x,s.y,s.r,0,Math.PI*2);sctx.fill();
-});
-for(let i=comets.length-1;i>=0;i--){
-let c=comets[i];
-c.x+=c.vx;c.y+=c.vy;c.l--;
-sctx.strokeStyle=`rgba(255,255,255,${c.l/180})`;
-sctx.beginPath();sctx.moveTo(c.x,c.y);sctx.lineTo(c.x-c.vx*10,c.y-c.vy*10);sctx.stroke();
-if(c.l<=0)comets.splice(i,1);
-}
-requestAnimationFrame(cosmos);
-}
-cosmos();
+    // Pień
+    const tg = new THREE.CylinderGeometry(thick*0.6, thick, h*0.55, 6, 3);
+    const tv = tg.attributes.position;
+    for(let i=0;i<tv.count;i++){
+      tv.setX(i, tv.getX(i)+(Math.random()-0.5)*0.04);
+      tv.setZ(i, tv.getZ(i)+(Math.random()-0.5)*0.04);
+    }
+    tg.computeVertexNormals();
+    scene.add(Object.assign(new THREE.Mesh(tg, new THREE.MeshLambertMaterial({color:new THREE.Color(0.03,0.025,0.015)})), {position: new THREE.Vector3(x, h*0.55/2, z)}).translateX(x).translateY(h*0.55/2).translateZ(z));
+    const trunk = new THREE.Mesh(tg, new THREE.MeshLambertMaterial({color:new THREE.Color(0.03,0.025,0.015)}));
+    trunk.position.set(x, h*0.55/2, z);
+    scene.add(trunk);
+
+    // Korona
+    const layers = 3 + Math.floor(Math.random()*2);
+    for(let i=0;i<layers;i++){
+      const ratio = 1 - i/layers;
+      const cr = (thick*5 + Math.random()*0.6) * ratio * 1.4;
+      const ch = (1.8 + Math.random()*1.2) * ratio + 0.8;
+      const cg = new THREE.ConeGeometry(cr, ch, 7+Math.floor(Math.random()*3));
+      const cv2 = cg.attributes.position;
+      for(let j=0;j<cv2.count;j++){
+        cv2.setX(j, cv2.getX(j)+(Math.random()-0.5)*0.08);
+        cv2.setZ(j, cv2.getZ(j)+(Math.random()-0.5)*0.08);
+      }
+      cg.computeVertexNormals();
+      const d = 0.02 + Math.random()*0.025;
+      const cone = new THREE.Mesh(cg, new THREE.MeshLambertMaterial({color:new THREE.Color(d*0.6,d,d*0.5)}));
+      cone.position.set(x+(Math.random()-0.5)*0.1, h*0.4 + i*(ch*0.55), z+(Math.random()-0.5)*0.1);
+      scene.add(cone);
+    }
+    return {x, z, r: thick*4+0.35};
+  }
+
+  // Martwe drzewo (gałęzie)
+  function addDeadTree(x, z){
+    const h     = 6 + Math.random()*5;
+    const thick = 0.07 + Math.random()*0.1;
+    const mat   = new THREE.MeshLambertMaterial({color:0x050503});
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(thick*0.3,thick,h,5), mat);
+    trunk.position.set(x, h/2, z);
+    trunk.rotation.z = (Math.random()-0.5)*0.12;
+    scene.add(trunk);
+    for(let i=0;i<4;i++){
+      const bLen = 0.8 + Math.random()*1.5;
+      const bh   = h*0.5 + Math.random()*h*0.4;
+      const b = new THREE.Mesh(new THREE.CylinderGeometry(0.02,thick*0.3,bLen,4), mat);
+      b.position.set(x+Math.cos(i*1.6)*bLen*0.4, bh, z+Math.sin(i*1.6)*bLen*0.4);
+      b.rotation.z = (Math.random()-0.5)*1.2;
+      b.rotation.y = Math.random()*Math.PI*2;
+      scene.add(b);
+    }
+    return {x, z, r:0.25};
+  }
+
+  // Generowanie lasu
+  const trees = [];
+  // Bliska warstwa
+  for(let i=0;i<12;i++){
+    const a=(i/12)*Math.PI*2+Math.random()*0.4, d=4+Math.random()*5;
+    trees.push(addTree(Math.cos(a)*d, Math.sin(a)*d));
+  }
+  // Środkowa warstwa
+  for(let i=0;i<28;i++){
+    const a=(i/28)*Math.PI*2+Math.random()*0.5, d=9+Math.random()*7;
+    trees.push(Math.random()<0.25 ? addDeadTree(Math.cos(a)*d,Math.sin(a)*d) : addTree(Math.cos(a)*d,Math.sin(a)*d));
+  }
+  // Zewnętrzna ściana
+  for(let i=0;i<50;i++){
+    const a=Math.random()*Math.PI*2, d=16+Math.random()*8;
+    trees.push(addTree(Math.cos(a)*d, Math.sin(a)*d));
+  }
+
+  // Kamienie
+  for(let i=0;i<25;i++){
+    const a=Math.random()*Math.PI*2, d=2+Math.random()*18, s=0.1+Math.random()*0.4;
+    const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(s,0),
+      new THREE.MeshLambertMaterial({color:new THREE.Color(0.04,0.05,0.035)}));
+    rock.position.set(Math.cos(a)*d, s*0.4, Math.sin(a)*d);
+    rock.rotation.set(Math.random(),Math.random(),Math.random());
+    scene.add(rock);
+  }
+
+  // Cząsteczki mgły
+  const mistPos = new Float32Array(200*3);
+  for(let i=0;i<200;i++){
+    const a=Math.random()*Math.PI*2, d=Math.random()*20;
+    mistPos[i*3]=Math.cos(a)*d; mistPos[i*3+1]=Math.random()*1.2; mistPos[i*3+2]=Math.sin(a)*d;
+  }
+  const mistGeo = new THREE.BufferGeometry();
+  mistGeo.setAttribute('position', new THREE.BufferAttribute(mistPos,3));
+  const mist = new THREE.Points(mistGeo, new THREE.PointsMaterial({color:0x0d1e0d,size:1.2,transparent:true,opacity:0.18,sizeAttenuation:true}));
+  scene.add(mist);
+
+  // Sterowanie
+  const keys = {};
+  document.addEventListener('keydown', e => {
+    keys[e.code] = true;
+    if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
+  });
+  document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+  let yaw=0, pitch=0, locked=false, t=0;
+
+  container.addEventListener('click', () => container.requestPointerLock());
+  document.addEventListener('pointerlockchange', () => {
+    locked = document.pointerLockElement === container;
+    document.getElementById('click_msg').style.opacity = locked ? '0' : '1';
+  });
+  document.addEventListener('mousemove', e => {
+    if(!locked) return;
+    yaw   -= e.movementX * 0.0022;
+    pitch  = Math.max(-0.55, Math.min(0.55, pitch - e.movementY*0.0022));
+  });
+
+  function collides(nx, nz){
+    if(Math.sqrt(nx*nx+nz*nz) > 22) return true;
+    for(const tr of trees){
+      const dx=nx-tr.x, dz=nz-tr.z;
+      if(dx*dx+dz*dz < (tr.r+0.3)*(tr.r+0.3)) return true;
+    }
+    return false;
+  }
+
+  const fwd=new THREE.Vector3(), rgt=new THREE.Vector3();
+  const SPEED = 0.055;
+
+  function loop(){
+    requestAnimationFrame(loop);
+    t += 0.016;
+
+    camera.rotation.order = 'YXZ';
+    camera.rotation.y = yaw;
+    camera.rotation.x = pitch;
+
+    fwd.set(Math.sin(yaw), 0, Math.cos(yaw));
+    rgt.set(Math.cos(yaw), 0, -Math.sin(yaw));
+
+    let mx=0, mz=0;
+    if(keys['KeyW']||keys['ArrowUp'])    { mx-=fwd.x; mz-=fwd.z; }
+    if(keys['KeyS']||keys['ArrowDown'])  { mx+=fwd.x; mz+=fwd.z; }
+    if(keys['KeyA']||keys['ArrowLeft'])  { mx-=rgt.x; mz-=rgt.z; }
+    if(keys['KeyD']||keys['ArrowRight']) { mx+=rgt.x; mz+=rgt.z; }
+
+    const len = Math.sqrt(mx*mx+mz*mz);
+    if(len>0){ mx=mx/len*SPEED; mz=mz/len*SPEED; }
+
+    const nx=camera.position.x+mx, nz=camera.position.z+mz;
+    if(!collides(nx,nz)){ camera.position.x=nx; camera.position.z=nz; }
+
+    camera.position.y = 1.65 + (len>0 ? Math.sin(t*8)*0.04 : 0);
+    mist.rotation.y += 0.0003;
+
+    renderer.render(scene, camera);
+  }
+  loop();
+
+  window.addEventListener('resize', () => {
+    const w=window.innerWidth, h=window.innerHeight;
+    camera.aspect = w/h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+  });
+})();
 </script>
 </body>
 </html>
